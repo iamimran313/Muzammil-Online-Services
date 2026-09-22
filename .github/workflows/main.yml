@@ -20,15 +20,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK
-        run: |
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
-
       - name: Extract Android project ZIP
         run: |
           mkdir -p project
@@ -36,7 +27,15 @@ jobs:
 
       - name: Find Gradle project
         run: |
-          PROJECT_DIR=$(dirname "$(find project -type f \( -name 'settings.gradle.kts' -o -name 'settings.gradle' \) | head -n 1)")
+          SETTINGS_FILE=$(find project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: settings.gradle or settings.gradle.kts not found"
+            find project -maxdepth 5 -type f | head -100
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Android project found at: $PROJECT_DIR"
 
@@ -47,11 +46,19 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          gradle -p "$PROJECT_DIR" assembleDebug
+          if [ -f "$PROJECT_DIR/gradlew" ]; then
+            chmod +x "$PROJECT_DIR/gradlew"
+            "$PROJECT_DIR/gradlew" -p "$PROJECT_DIR" assembleDebug
+          else
+            gradle -p "$PROJECT_DIR" assembleDebug
+          fi
+
+      - name: Find APK
+        run: |
+          find project -type f -name "*.apk" -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Muzammil-Online-Service-APK
-          path: |
-            project/**/build/outputs/apk/debug/*.apk
+          path: project/**/build/outputs/apk/debug/*.apk
